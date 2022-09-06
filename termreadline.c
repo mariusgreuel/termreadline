@@ -2,7 +2,16 @@
 #include <stdlib.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+
+#ifdef _MSC_VER
+#include "msvc/unistd.h"
+#else
 #include <unistd.h>
+#endif
+
+#ifdef WIN32
+#include <conio.h>
+#endif
 
 // Standalone readline test
 
@@ -27,7 +36,7 @@ static int process_line(char *cmdstr, PROGRAMMER *pgm, struct avrpart *p) {
   return 0;
 }
 
-static int cmd_keep_board_alive(PROGRAMMER *pgm) {
+static void cmd_keep_board_alive(PROGRAMMER *pgm) {
   // send GET_SYNC command if pgm is bootloader
   printf(".");
   fflush(stdout);
@@ -51,12 +60,16 @@ static int term_running;
 
 // Any character in standard input available?
 static int readytoread() {
+#ifdef WIN32
+    return _kbhit();
+#else
   struct timeval tv = { 0L, 0L };
   fd_set fds;
   FD_ZERO(&fds);
   FD_SET(0, &fds);
 
   return select(1, &fds, NULL, NULL, &tv) > 0;
+#endif
 }
 
 // Callback processes commands whenever readline() has finished
