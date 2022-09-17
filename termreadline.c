@@ -10,7 +10,7 @@
 #endif
 
 #ifdef WIN32
-#include <conio.h>
+#include <windows.h>
 #endif
 
 // Standalone readline test
@@ -61,14 +61,62 @@ static int term_running;
 // Any character in standard input available?
 static int readytoread() {
 #ifdef WIN32
-    return _kbhit();
-#else
-  struct timeval tv = { 0L, 0L };
-  fd_set fds;
-  FD_ZERO(&fds);
-  FD_SET(0, &fds);
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
 
-  return select(1, &fds, NULL, NULL, &tv) > 0;
+    while (1)
+    {
+        INPUT_RECORD input[1] = { 0 };
+        DWORD dwNumberOfEventsRead = 0;
+        BOOL success = PeekConsoleInputA(hStdin, input, ARRAYSIZE(input), &dwNumberOfEventsRead);
+        if (!success)
+        {
+            DWORD dwError = GetLastError();
+            if (dwError == ERROR_INVALID_HANDLE)
+            {
+                // STD_INPUT_HANDLE was redirected to a pipe or file
+                return 1;
+            }
+            else
+            {
+                printf("PeekConsoleInputA failed: %u\n", dwError);
+                return -1;
+            }
+        }
+        else if (dwNumberOfEventsRead > 0)
+        {
+            // Filter out all the events that readline does not handle...
+
+            if ((input[0].EventType & KEY_EVENT) != 0 && input[0].Event.KeyEvent.bKeyDown)
+            {
+                //printf("Got event %d\n", input[0].EventType);
+                return 1; // Got some.
+            }
+            else
+            {
+                //printf("Skipping event %d\n", input[0].EventType);
+
+                // Some event not handled by readline, drain it.
+                success = ReadConsoleInputA(hStdin, input, ARRAYSIZE(input), &dwNumberOfEventsRead);
+                if (!success)
+                {
+                    DWORD dwError = GetLastError();
+                    printf("ReadConsoleInputA failed: %u\n", dwError);
+                    return -1;
+                }
+            }
+        }
+        else
+        {
+            return 0; // Nothing in the input buffer.
+        }
+    }
+#else
+    struct timeval tv = { 0L, 0L };
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(0, &fds);
+
+    return select(1, &fds, NULL, NULL, &tv) > 0;
 #endif
 }
 
